@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rubik's Cube Solver Stepwise Visualizer</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; }
+  h1 { text-align: center; }
+  label, input, button { display: block; margin: 10px 0; }
+  .cube-container {
+  display: grid;
+  grid-template-columns: repeat(4, 66px);
+  grid-template-rows: repeat(3, 66px);
+  gap: 4px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.face {
+  display: grid;
+  grid-template-columns: repeat(3, 20px);
+  grid-template-rows: repeat(3, 20px);
+  gap: 1px;
+  background: #000;
+  padding: 3px;
+  border: 2px solid #000;
+}
+
+.sticker {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #000;
+}
+</style>
+</head>
+<body>
+<h1>Rubik's Cube Solver Stepwise Visualizer</h1>
+
+<label for="scramble">Enter scramble moves (space separated):</label>
+<input type="text" id="scramble" value="U R' D F2 L U' B D' R2 F' L2 U2 B2 D R' F L' B' U D2" size="40" />
+<button id="startButton">Apply Scramble & Start Solving</button>
+<button id="nextMoveButton" disabled>Next Move</button>
+
+<div class="cube-container">
+  <div id="U" class="face"></div>
+  <div id="L" class="face"></div>
+  <div id="F" class="face"></div>
+  <div id="R" class="face"></div>
+  <div id="B" class="face"></div>
+  <div id="D" class="face"></div>
+</div>
+
+<h3>Solution Moves:</h3>
+<div id="solutionMoves"></div>
+
+<!-- Just replace the <script>...</script> section in your index.html with this -->
+<script>
+const COLORS = { 'W': '#ffffff', 'Y': '#ffeb3b', 'R': '#f44336', 'O': '#ff9800', 'B': '#2196f3', 'G': '#4caf50' };
+// server returns states[ s ][ face ][ row ][ col ] in order U,D,F,B,L,R
+let states = [];
+let moves = [];
+let scrambleLen = 0;
+let currentIndex = 0;
+
+function renderCube(state) {
+  const faceIds = ['U','D','F','B','L','R'];
+  for (let f=0; f<6; f++) {
+    const faceDiv = document.getElementById(faceIds[f]);
+    faceDiv.innerHTML = '';
+    for (let i=0;i<3;i++) {
+      for (let j=0;j<3;j++) {
+        const s = document.createElement('div');
+        s.className = 'sticker';
+        const c = state[f][i][j];
+        s.style.backgroundColor = COLORS[c] || '#999';
+        faceDiv.appendChild(s);
+      }
+    }
+  }
+}
+
+document.getElementById('startButton').addEventListener('click', async () => {
+  const scramble = document.getElementById('scramble').value.trim();
+  if (!scramble) { alert('Enter scramble'); return; }
+  try {
+    document.getElementById('startButton').disabled = true;
+    document.getElementById('startButton').innerText = 'Solving...';
+    const res = await fetch(`http://localhost:8000/solve?scramble=${encodeURIComponent(scramble)}`);
+    const data = await res.json();
+
+    if (data.error) {
+      alert('Server error: ' + data.error);
+      return;
+    }
+
+    states = data.states || [];
+    moves = data.moves || [];
+    scrambleLen = typeof data.scrambleLength === 'number' ? data.scrambleLength : (states.length - 1 - moves.length);
+
+    // Render scrambled cube (last scramble state)
+    const scrambleStateIndex = Math.min(scrambleLen, Math.max(0, states.length - 1));
+    currentIndex = scrambleStateIndex;
+    if (states.length) renderCube(states[scrambleStateIndex]);
+
+    document.getElementById('solutionMoves').innerText = "Scramble applied. Click 'Next Move' to step through the solver.";
+
+    // show diagnostics if final not solved
+    if (data.finalSolved === false) {
+      const mism = data.mismatches || [];
+      document.getElementById('solutionMoves').innerText += "\n\nWarning: final solved check FAILED. Mismatches:\n" + mism.join("\n");
+      console.warn("Final solved check FAILED:", mism);
+    }
+
+    document.getElementById('nextMoveButton').disabled = false;
+  } catch (e) {
+    alert('Error fetching from server. Make sure Java server is running at http://localhost:8000\n' + e);
+  } finally {
+    document.getElementById('startButton').disabled = false;
+    document.getElementById('startButton').innerText = 'Apply Scramble & Start Solving';
+  }
+});
+
+document.getElementById('nextMoveButton').addEventListener('click', () => {
+  if (!states.length) return;
+
+  // states: [ solved(initial), scramble step1, ..., scramble stepN, solve step1, ..., finalSolved ]
+  // scrambleLen points to the index of the last scramble state (N)
+  // moves[] is the reverse moves list of length M (should equal scrambleLen)
+  // the first solve state is at index scrambleLen+1 and corresponds to moves[0]
+  if (currentIndex < states.length - 1) {
+    currentIndex++;
+    renderCube(states[currentIndex]);
+
+    const moveIndex = currentIndex - scrambleLen - 1;
+    const moveLabel = (moveIndex >= 0 && moveIndex < moves.length) ? moves[moveIndex] : '(scramble)';
+    document.getElementById('solutionMoves').innerText = `Move ${moveIndex+1 >= 0 ? moveIndex+1 : ''}: ${moveLabel}`;
+
+    if (currentIndex === states.length - 1) {
+      document.getElementById('solutionMoves').innerText += "\nCube Solved! 🎉";
+      document.getElementById('nextMoveButton').disabled = true;
+    }
+  }
+});
+</script>
+
+</body>
+</html>
