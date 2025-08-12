@@ -21,8 +21,8 @@ This project is a simple **Rubik’s Cube Solver** and **step-by-step web visual
 
 ### 1. Start the Java backend
 
--javac RubiksCubeSolver.java
--java RubiksCubeSolver
+- javac RubiksCubeSolver.java
+- java RubiksCubeSolver
 
 ### 2.This starts the HTTP server at:
 
